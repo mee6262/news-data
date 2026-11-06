@@ -1,0 +1,143 @@
+# MeeNews sources
+# enabled: true  -> fetched every run
+# enabled: false -> candidate, only tested by `python fetch.py check`
+# id_from: guid  -> dedupe by feed guid instead of link (for Google News redirects)
+
+sources:
+  - id: bbc-world
+    name: BBC World
+    url: https://feeds.bbci.co.uk/news/world/rss.xml
+    category: world
+    enabled: true
+
+  - id: bbc-tech
+    name: BBC Technology
+    url: https://feeds.bbci.co.uk/news/technology/rss.xml
+    category: tech
+    enabled: true
+
+  - id: bbc-business
+    name: BBC Business
+    url: https://feeds.bbci.co.uk/news/business/rss.xml
+    category: business
+    enabled: true
+
+  - id: bbc-science
+    name: BBC Science
+    url: https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
+    category: science
+    enabled: true
+
+  - id: dw-en
+    name: DW English
+    url: https://rss.dw.com/rdf/rss-en-all
+    category: world
+    enabled: true
+
+  - id: dw-es
+    name: DW Spanish
+    url: https://rss.dw.com/rdf/rss-sp-all
+    category: world
+    enabled: true
+
+  - id: dw-ru
+    name: DW Russian
+    url: https://rss.dw.com/xml/rss-ru-rus
+    category: world
+    enabled: true
+
+  - id: dw-zh
+    name: DW Chinese
+    url: https://rss.dw.com/xml/rss-chi-all
+    category: world
+    enabled: true
+
+  - id: aljazeera
+    name: Al Jazeera
+    url: https://www.aljazeera.com/xml/rss/all.xml
+    category: world
+    enabled: true
+
+  - id: sky-world
+    name: Sky News World
+    url: https://feeds.skynews.com/feeds/rss/world.xml
+    category: world
+    enabled: true
+
+  - id: guardian-world
+    name: The Guardian World
+    url: https://www.theguardian.com/world/rss
+    category: world
+    enabled: true
+
+  - id: france24-en
+    name: France 24 EN
+    url: https://www.france24.com/en/rss
+    category: world
+    enabled: true
+
+  - id: france24-fr
+    name: France 24 FR
+    url: https://www.france24.com/fr/rss
+    category: world
+    enabled: true
+
+  - id: bangkokpost-opinion
+    name: Bangkok Post Opinion
+    url: https://www.bangkokpost.com/rss/data/opinion.xml
+    category: th
+    enabled: true
+
+  - id: npr-world
+    name: NPR World
+    url: https://feeds.npr.org/1004/rss.xml
+    category: world
+    enabled: true
+    note: may be blocked outside the US
+
+  - id: reuters-gn
+    name: Reuters (via Google News)
+    url: https://news.google.com/rss/search?q=site:reuters.com+when:2h&hl=en-US&gl=US&ceid=US:en
+    category: world
+    enabled: true
+    id_from: guid
+    note: titles only, no full text
+
+  - id: ap-gn
+    name: AP (via Google News)
+    url: https://news.google.com/rss/search?q=site:apnews.com+when:2h&hl=en-US&gl=US&ceid=US:en
+    category: world
+    enabled: true
+    id_from: guid
+    note: titles only, no full text
+
+  # ---- candidates (open questions 2 and 4 in PLAN.md) ----
+  - id: bangkokpost-thailand
+    name: Bangkok Post Thailand
+    url: https://www.bangkokpost.com/rss/data/thailand.xml
+    category: th
+    enabled: false
+
+  - id: bangkokpost-world
+    name: Bangkok Post World
+    url: https://www.bangkokpost.com/rss/data/world.xml
+    category: world
+    enabled: false
+
+  - id: bangkokpost-business
+    name: Bangkok Post Business
+    url: https://www.bangkokpost.com/rss/data/business.xml
+    category: business
+    enabled: false
+
+  - id: thaiger
+    name: The Thaiger
+    url: https://thethaiger.com/feed
+    category: th
+    enabled: false
+
+  - id: nation-th
+    name: The Nation Thailand
+    url: https://www.nationthailand.com/rss
+    category: th
+    enabled: false
