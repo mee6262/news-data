@@ -111,33 +111,35 @@ sources:
     id_from: guid
     note: titles only, no full text
 
-  # ---- candidates (open questions 2 and 4 in PLAN.md) ----
+  # ---- Thai sources added 2026-11-07 ----
   - id: bangkokpost-thailand
     name: Bangkok Post Thailand
     url: https://www.bangkokpost.com/rss/data/thailand.xml
     category: th
-    enabled: false
+    enabled: true
 
   - id: bangkokpost-world
     name: Bangkok Post World
     url: https://www.bangkokpost.com/rss/data/world.xml
     category: world
-    enabled: false
+    enabled: true
 
   - id: bangkokpost-business
     name: Bangkok Post Business
     url: https://www.bangkokpost.com/rss/data/business.xml
     category: business
-    enabled: false
+    enabled: true
 
   - id: thaiger
     name: The Thaiger
     url: https://thethaiger.com/feed
     category: th
-    enabled: false
+    enabled: true
 
   - id: nation-th
     name: The Nation Thailand
-    url: https://www.nationthailand.com/rss
+    url: https://api.nationthailand.com/sitemap/latest
     category: th
     enabled: false
+    type: news-sitemap
+    note: no RSS; Google News sitemap has title, date, link, image. Enable after phase 1 adds the sitemap parser.
