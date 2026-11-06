@@ -258,6 +258,48 @@ def cmd_check(args) -> int:
     return 0
 
 
+PROBE_TEXT = "Two dead after bus carrying schoolchildren crashes in France, officials say"
+
+
+def _probe_deep_translator() -> str:
+    return GoogleTranslator(source="auto", target="th").translate(PROBE_TEXT)
+
+
+def _probe_gtx() -> str:
+    r = requests.get(
+        "https://translate.googleapis.com/translate_a/single",
+        params={"client": "gtx", "sl": "auto", "tl": "th", "dt": "t", "q": PROBE_TEXT},
+        headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    return "".join(part[0] for part in r.json()[0] if part and part[0])
+
+
+def _probe_mymemory() -> str:
+    r = requests.get(
+        "https://api.mymemory.translated.net/get",
+        params={"q": PROBE_TEXT, "langpair": "en|th"},
+        headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    data = r.json()
+    if data.get("responseStatus") != 200:
+        raise RuntimeError(data.get("responseDetails"))
+    return data["responseData"]["translatedText"]
+
+
+def cmd_probe(args) -> int:
+    """Try each translation engine 3 times, 2s apart, from the current network."""
+    for name, fn in [("deep-translator", _probe_deep_translator), ("google-gtx", _probe_gtx), ("mymemory", _probe_mymemory)]:
+        for i in range(3):
+            try:
+                print(f"{name} #{i + 1}: OK  {fn()}", flush=True)
+            except Exception as e:  # noqa: BLE001
+                print(f"{name} #{i + 1}: FAIL {type(e).__name__}: {str(e)[:150]}", flush=True)
+            time.sleep(2)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="MeeNews fetcher")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -266,6 +308,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", default="docs/source-check.md")
     c.add_argument("--json", default="source-check.json")
     c.set_defaults(func=cmd_check)
+    sub.add_parser("probe", help="test translation engines").set_defaults(func=cmd_probe)
     args = p.parse_args(argv)
     return args.func(args)
 
