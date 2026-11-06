@@ -1,0 +1,70 @@
+name: fetch
+
+# Hourly: fetch enabled sources and publish them to the `data` branch.
+# The `data` branch is rebuilt as a single orphan commit every run, so the
+# repo only ever holds the current files (no growing history).
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Load current data branch
+        run: |
+          mkdir -p data
+          if git fetch --depth=1 origin data; then
+            git archive FETCH_HEAD | tar -x -C data
+            echo "loaded $(find data -type f | wc -l) files"
+          else
+            echo "no data branch yet, starting empty"
+          fi
+
+      - name: Fetch sources
+        id: fetch
+        run: python fetch.py run --data data
+
+      - name: Publish data branch (orphan commit + force push)
+        if: steps.fetch.outputs.changed == 'true'
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          cd data
+          git init -q -b data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "data $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data:data
+          echo "pushed $(git ls-files | wc -l) files, $(du -sh --exclude=.git . | cut -f1)"
+
+      - name: Summary
+        if: always()
+        run: |
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY" || true
+          import json
+          s = json.load(open("data/status.json", encoding="utf-8"))
+          print(f"**{s['run_at']}** · sources ok {s['sources_ok']}/{s['sources_total']} · new {s['new_articles']} · total {s['articles_total']} · {s['duration_s']}s\n")
+          print("| Source | OK | Items | New | Error |\n|---|---|---|---|---|")
+          for x in s["sources"]:
+              print(f"| {x['name']} | {'✅' if x['ok'] else '❌'} | {x['count']} | {x['new']} | {x['error'] or ''} |")
+          EOF
