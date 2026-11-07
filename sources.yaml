@@ -252,7 +252,7 @@ sources:
   - id: cna-asia
     name: CNA Asia
     url: https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511
-    category: world
+    category: asia
     lang: en
     enabled: true
     note: added 2026-11-07
@@ -276,7 +276,7 @@ sources:
   - id: japantimes
     name: The Japan Times
     url: https://www.japantimes.co.jp/feed/
-    category: world
+    category: asia
     lang: en
     enabled: true
     note: added 2026-11-07
@@ -284,7 +284,7 @@ sources:
   - id: yonhap
     name: Yonhap English
     url: https://en.yna.co.kr/RSS/news.xml
-    category: world
+    category: asia
     lang: en
     enabled: true
     note: added 2026-11-07
@@ -400,3 +400,195 @@ sources:
     lang: en
     enabled: true
     note: added 2026-11-07
+
+  - id: nikkei-asia
+    name: Nikkei Asia
+    url: https://asia.nikkei.com/rss/feed/nar
+    category: asia
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: diplomat
+    name: The Diplomat
+    url: https://thediplomat.com/feed/
+    category: asia
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: scmp-asia
+    name: SCMP Asia
+    url: https://www.scmp.com/rss/3/feed
+    category: asia
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: prachachat
+    name: Prachachat
+    url: https://www.prachachat.net/feed
+    category: business
+    lang: th
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: thestandard-wealth
+    name: THE STANDARD Wealth
+    url: https://thestandard.co/category/wealth/feed/
+    category: business
+    lang: th
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: bbc-health
+    name: BBC Health
+    url: https://feeds.bbci.co.uk/news/health/rss.xml
+    category: health
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: npr-health
+    name: NPR Health
+    url: https://feeds.npr.org/1128/rss.xml
+    category: health
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: sciencedaily-health
+    name: ScienceDaily Health
+    url: https://www.sciencedaily.com/rss/health_medicine.xml
+    category: health
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: who-news
+    name: WHO News
+    url: https://www.who.int/rss-feeds/news-english.xml
+    category: health
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: guardian-environment
+    name: The Guardian Environment
+    url: https://www.theguardian.com/environment/rss
+    category: environment
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: insideclimate
+    name: Inside Climate News
+    url: https://insideclimatenews.org/feed/
+    category: environment
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: mongabay
+    name: Mongabay
+    url: https://news.mongabay.com/feed/
+    category: environment
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: bbc-sport
+    name: BBC Sport
+    url: https://feeds.bbci.co.uk/sport/rss.xml
+    category: sport
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: guardian-sport
+    name: The Guardian Sport
+    url: https://www.theguardian.com/sport/rss
+    category: sport
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: espn
+    name: ESPN
+    url: https://www.espn.com/espn/rss/news
+    category: sport
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: matichon-sport
+    name: Matichon Sport
+    url: https://www.matichon.co.th/sport/feed
+    category: sport
+    lang: th
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: khaosod-sport
+    name: Khaosod Sport
+    url: https://www.khaosod.co.th/sports/feed
+    category: sport
+    lang: th
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: thestandard-sport
+    name: THE STANDARD Sport
+    url: https://thestandard.co/category/sport/feed/
+    category: sport
+    lang: th
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: bbc-entertainment
+    name: BBC Entertainment & Arts
+    url: https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml
+    category: entertainment
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: variety
+    name: Variety
+    url: https://variety.com/feed/
+    category: entertainment
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: guardian-culture
+    name: The Guardian Culture
+    url: https://www.theguardian.com/culture/rss
+    category: entertainment
+    lang: en
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: matichon-entertainment
+    name: Matichon Entertainment
+    url: https://www.matichon.co.th/entertainment/feed
+    category: entertainment
+    lang: th
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: khaosod-entertainment
+    name: Khaosod Entertainment
+    url: https://www.khaosod.co.th/entertainment/feed
+    category: entertainment
+    lang: th
+    enabled: true
+    note: added 2026-11-07 (new categories)
+
+  - id: thestandard-pop
+    name: THE STANDARD Pop
+    url: https://thestandard.co/category/pop/feed/
+    category: entertainment
+    lang: th
+    enabled: true
+    note: added 2026-11-07 (new categories)

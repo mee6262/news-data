@@ -624,6 +624,29 @@ def load_articles(news_dir: Path) -> dict[str, dict]:
     return articles
 
 
+# Broad categories: a story there moves to a section category when a section feed also carries it.
+GENERAL_CATEGORIES = {"world", "th", ""}
+
+
+def recategorize(articles: dict[str, dict], sources: list[dict]) -> int:
+    """Stored stories follow their source when its category is changed in sources.yaml."""
+    cat_of = {s["id"]: s.get("category", "") for s in sources}
+    changed = 0
+    for a in articles.values():
+        new = cat_of.get(a.get("source_id"))
+        cur = a.get("category", "")
+        if new is None or new == cur:
+            continue
+        # a section category the story got from a second feed is kept (unless the source itself is specific)
+        if cur not in GENERAL_CATEGORIES and new in GENERAL_CATEGORIES:
+            continue
+        a["category"] = new
+        changed += 1
+    if changed:
+        print(f"recategorized {changed} stored stories", flush=True)
+    return changed
+
+
 def set_output(name: str, value: str) -> None:
     out = os.environ.get("GITHUB_OUTPUT")
     if out:
@@ -640,6 +663,7 @@ def cmd_run(args) -> int:
 
     articles = load_articles(news_dir)
     before = len(articles)
+    recategorize(articles, load_sources(args.sources, include_disabled=True))
     prev_status = read_json(data_dir / "status.json") or {}
     prev_src = {s["id"]: s for s in prev_status.get("sources", [])}
 
@@ -671,6 +695,11 @@ def cmd_run(args) -> int:
                 it["fetched_at"] = iso(run_at)
                 articles[it["id"]] = it
                 st["new"] += 1
+            else:
+                # same story in a broad feed and a section feed (e.g. Matichon + Matichon Sport): keep the section
+                old_cat = articles[it["id"]].get("category", "")
+                if old_cat in GENERAL_CATEGORIES and it["category"] not in GENERAL_CATEGORIES:
+                    articles[it["id"]]["category"] = it["category"]
         print(f"[ OK ] {s['name']}: {st['count']} items, {st['new']} new", flush=True)
         src_status.append(st)
 
