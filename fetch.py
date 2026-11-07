@@ -180,14 +180,24 @@ def parse_rss(source: dict, content: bytes) -> list[dict]:
     if not feed.entries:
         raise FetchError("no entries" + (f" ({feed.get('bozo_exception')})" if feed.get("bozo") else ""))
     suffix = source.get("title_suffix")
+    include = re.compile(source["include"]) if source.get("include") else None
+    prefix_re = re.compile(source["prefix_regex"]) if source.get("prefix_regex") else None
     items = []
-    for e in feed.entries[:MAX_ITEMS]:
+    for e in feed.entries:
+        if len(items) >= MAX_ITEMS:
+            break
         link = (e.get("link") or "").strip()
         title = clean_text(e.get("title"))
         if not link or not title:
             continue
+        if include and not include.search(title):
+            continue  # e.g. GDACS: only orange and red alerts
         if suffix and title.endswith(suffix):
             title = title[: -len(suffix)].rstrip()
+        if prefix_re:  # e.g. TMD quakes: put the magnitude from the description in front of the place name
+            m = prefix_re.search(clean_text(e.get("summary")) or "")
+            if m:
+                title = source.get("prefix", "{0} ").format(*m.groups()) + title
         key = e.get("id") if source.get("id_from") == "guid" else None
         content = truncate(entry_content(e), CONTENT_MAX)
         image = entry_image(e)
@@ -259,7 +269,48 @@ def fetch_source(source: dict) -> list[dict]:
         it["source_id"] = source["id"]
         it["category"] = source.get("category", "")
         it["lang"] = source.get("lang", "")
+        mark(it, source)
     return items
+
+
+# ---------- topics and urgent alerts ----------
+# Topic tags put a story into a topic tab (สงคราม, ภัยพิบัติ) as well as its own category.
+# Keyword lists, English and Thai. Titles plus the start of the summary are checked.
+TOPICS = {
+    "conflict": re.compile(
+        r"\b(war|wars|warfare|wartime|air ?strikes?|missiles?|drone (strike|attack)s?|shelling|ceasefire|truce|"
+        r"invasion|invaded|frontline|front line|armed conflict|military offensive|insurgents?|militants?|rebels?|"
+        r"hamas|hezbollah|houthis?|gaza|west bank|ukraine|kyiv|kremlin|nato|coup|hostages?|troops)\b"
+        r"|สงคราม|สู้รบ|ปะทะ|ขีปนาวุธ|โจมตีทางอากาศ|ยิงถล่ม|หยุดยิง|รุกราน|ตัวประกัน|ฮามาส|ฮิซบอลเลาะห์|ฮูตี|กาซา|ยูเครน|รัฐประหาร",
+        re.I),
+    "disaster": re.compile(
+        r"\b(earthquakes?|quake|tsunami|typhoon|hurricane|cyclone|tropical storm|floods?|flooding|flash floods?|"
+        r"landslides?|mudslides?|wildfires?|bushfires?|forest fires?|volcano|volcanic|eruption|heatwave|drought|"
+        r"avalanche|tornado(es)?|evacuat\w*)\b"
+        r"|แผ่นดินไหว|สึนามิ|ไต้ฝุ่น|พายุ|น้ำท่วม|ดินถล่ม|โคลนถล่ม|ไฟป่า|ภูเขาไฟ|คลื่นความร้อน|ภัยแล้ง|อพยพ|ภัยพิบัติ",
+        re.I),
+}
+# Metaphors that are not wars or disasters.
+NOT_TOPIC = re.compile(r"\b(trade|price|tariff|culture|console|bidding|talent|streaming|format|star|flame|turf) wars?\b"
+                       r"|star wars|war of words|storm of (criticism|protest)|brainstorm|perfect storm"
+                       r"|สงครามการค้า|สงครามราคา|สงครามภาษี|พายุหมุนทางการเงิน", re.I)
+# Categories where these words are usually metaphors (a "war" of words in football, a film called "Typhoon").
+NO_TOPIC_CATEGORIES = {"sport", "entertainment", "tech"}
+BREAKING = re.compile(r"^\s*(breaking( news)?\b|ข่าวด่วน|ด่วน[!:\s])", re.I)
+
+
+def mark(a: dict, source: dict | None) -> None:
+    """Set topic tags and the urgent-alert flag. Safe to run again on stored stories."""
+    title = a.get("title") or ""
+    text = title + " " + (a.get("summary") or "")[:300]
+    tags = []
+    if a.get("category") not in NO_TOPIC_CATEGORIES and not NOT_TOPIC.search(text):
+        tags = [t for t, rx in TOPICS.items() if rx.search(text)]
+    if a.get("category") == "disaster" and "disaster" not in tags:
+        tags.append("disaster")
+    a["tags"] = tags
+    rule = (source or {}).get("alert_if")
+    a["alert"] = bool(BREAKING.search(title) or (rule and re.search(rule, text)))
 
 
 # ---------- full text from article pages (phase 3) ----------
@@ -663,7 +714,10 @@ def cmd_run(args) -> int:
 
     articles = load_articles(news_dir)
     before = len(articles)
-    recategorize(articles, load_sources(args.sources, include_disabled=True))
+    all_sources = {s["id"]: s for s in load_sources(args.sources, include_disabled=True)}
+    recategorize(articles, list(all_sources.values()))
+    for a in articles.values():
+        mark(a, all_sources.get(a.get("source_id")))
     prev_status = read_json(data_dir / "status.json") or {}
     prev_src = {s["id"]: s for s in prev_status.get("sources", [])}
 

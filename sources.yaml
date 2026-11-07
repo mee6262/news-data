@@ -7,6 +7,9 @@
 # no_summary     -> ignore the feed summary (Google News summaries are link lists)
 # title_suffix   -> strip this from the end of titles
 # fulltext: false -> never fetch the article page for full text (default: fetch when the feed has none)
+# include        -> keep only items whose title matches (regex)
+# alert_if       -> regex on title + summary: matching stories show in the red alert bar for 24 h
+# prefix_regex / prefix -> build a title prefix from the summary (e.g. the quake magnitude)
 
 sources:
 
@@ -592,3 +595,51 @@ sources:
     lang: th
     enabled: true
     note: added 2026-11-07 (new categories)
+
+  - id: gdacs
+    name: GDACS
+    url: https://www.gdacs.org/xml/rss.xml
+    category: disaster
+    lang: en
+    include: '^(Orange|Red)\b'
+    alert_if: '^Red\b'
+    fulltext: false
+    enabled: true
+    note: Global Disaster Alert and Coordination System (UN/EU); green alerts are skipped
+
+  - id: usgs-quakes
+    name: USGS Earthquakes
+    url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.atom
+    category: disaster
+    lang: en
+    alert_if: '^M (6\.[5-9]|[7-9]\.\d)'
+    fulltext: false
+    enabled: true
+    note: magnitude 4.5+ in the last day; alert at 6.5+
+
+  - id: tmd-quakes
+    name: กรมอุตุนิยมวิทยา แผ่นดินไหว
+    url: https://earthquake.tmd.go.th/feed/rss_tmd.xml
+    category: disaster
+    lang: th
+    prefix_regex: 'ขนาด\s*([\d.]+)'
+    prefix: 'แผ่นดินไหว ขนาด {0} · '
+    alert_if: 'ขนาด\s*([5-9]\.\d)'
+    fulltext: false
+    enabled: true
+    note: Thai Meteorological Department, quakes near Thailand; alert at 5.0+
+
+  - id: reliefweb
+    name: ReliefWeb Disasters
+    url: https://reliefweb.int/disasters/rss.xml
+    category: disaster
+    lang: en
+    fulltext: false
+    enabled: true
+
+  - id: un-peace
+    name: UN News Peace and Security
+    url: https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml
+    category: world
+    lang: en
+    enabled: true
