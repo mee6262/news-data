@@ -21,6 +21,7 @@ import sys
 import threading
 import time
 import xml.etree.ElementTree as ET
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -330,6 +331,100 @@ def category_for(a: dict, source: dict | None) -> str:
     if src_cat not in GENERAL_CATEGORIES:
         return src_cat  # a section source (BBC Sport, Variety...): always its own category
     return feed_category(a.get("feed_cats"), src_cat) or a.get("section_cat") or src_cat
+
+
+# ---------- same story from several outlets ----------
+# Stories whose titles (plus the start of the summary) share enough rare words, within 36 hours,
+# form a group; the app shows one card per group with "reported by N outlets". English and other
+# space-separated languages only (Thai has no spaces between words). Runs over the last 2 days.
+CLUSTER_WINDOW = timedelta(days=2)
+
+
+_STOP = set("""a an the and or but if of to in on at by for with from into over after before about as is are was were be been
+being has have had do does did not no its it this that these those he she they we you his her their our your who whom
+which what when where why how than then there here out up down off new says said say will would could should may might
+can just more most also amid while during under via per vs against between among across toward towards s t us uk""".split())
+_WORD = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
+
+
+def _toks(text, n=None):
+    words = [w.split("'")[0] for w in _WORD.findall((text or "").lower())]
+    words = [w for w in words if w not in _STOP and (len(w) >= 3 or w.isdigit())]
+    return words[:n] if n else words
+
+
+def _cluster(arts, min_title=3, min_jac=0.3, min_sum_shared=5, min_overlap=0.45, hours=36):
+    """arts: list of dicts id, title, summary, lang, t (epoch), source_id. Returns {id: cluster_id}."""
+    by_lang = defaultdict(list)
+    for a in arts:
+        by_lang[a["lang"]].append(a)
+    out = {}
+    for lang, items in by_lang.items():
+        if lang == "th":
+            continue  # Thai has no spaces between words
+        for a in items:
+            a["T"] = set(_toks(a["title"]))
+            a["S"] = a["T"] | set(_toks(a["summary"], 35))
+        df = defaultdict(int)
+        for a in items:
+            for w in a["T"]:
+                df[w] += 1
+        index = defaultdict(list)
+        items.sort(key=lambda a: a["t"])
+        clusters = []  # list of member lists
+        where = {}
+        for a in items:
+            cands = {}
+            for w in a["T"]:
+                if df[w] <= 40:
+                    cands.update((id(b), b) for b in index[w])
+            best, best_score = None, 0
+            for b in cands.values():
+                if abs(a["t"] - b["t"]) > hours * 3600:
+                    continue
+                if a["source_id"] == b["source_id"] and a["title"] != b["title"]:
+                    continue  # one outlet's running updates (election results, bulletins) are separate stories
+                st = len(a["T"] & b["T"])
+                jac = st / max(1, len(a["T"] | b["T"]))
+                ss = len(a["S"] & b["S"])
+                ov = ss / max(1, min(len(a["S"]), len(b["S"])))
+                ok = (st >= min_title and jac >= min_jac) or (st >= 2 and ss >= min_sum_shared and ov >= min_overlap)
+                if not ok:
+                    continue
+                score = jac + ov
+                if score > best_score:
+                    best, best_score = b, score
+            if best is not None:
+                ci = where[best["id"]]
+                seed = clusters[ci][0]
+                if len(a["T"] & seed["T"]) >= 2 or len(a["S"] & seed["S"]) >= 4:  # stop long chains drifting away
+                    clusters[ci].append(a)
+                    where[a["id"]] = ci
+            if a["id"] not in where:
+                where[a["id"]] = len(clusters)
+                clusters.append([a])
+            for w in a["T"]:
+                index[w].append(a)
+        for members in clusters:
+            if len({m["source_id"] for m in members}) > 1:
+                for m in members:
+                    out[m["id"]] = members[0]["id"]
+    return out
+
+
+def cluster_stories(articles: dict[str, dict], run_at: datetime) -> int:
+    since = run_at - CLUSTER_WINDOW
+    recent = []
+    for a in articles.values():
+        a.pop("cluster", None)
+        t = parse_iso(a.get("published_at")) or parse_iso(a.get("fetched_at"))
+        if t and t >= since:
+            recent.append({"id": a["id"], "title": a.get("title", ""), "summary": a.get("summary", ""),
+                           "lang": a.get("lang", ""), "source_id": a.get("source_id", ""), "t": t.timestamp()})
+    groups = _cluster(recent)
+    for aid, cid in groups.items():
+        articles[aid]["cluster"] = cid
+    return len(set(groups.values()))
 
 
 # ---------- topics and urgent alerts ----------
@@ -808,6 +903,7 @@ def cmd_run(args) -> int:
             moved += 1
         mark(a, src)
     print(f"categories: {moved} stories moved", flush=True)
+    print(f"same-story groups: {cluster_stories(articles, run_at)}", flush=True)
 
     fulltext_stats = None
     if os.environ.get("FULLTEXT", "1") == "1":
