@@ -601,8 +601,8 @@ sources:
     url: https://www.gdacs.org/xml/rss.xml
     category: disaster
     lang: en
-    include: '^(Orange|Red)\b'
-    alert_if: '^Red\b'
+    include: ^(Orange|Red)\b
+    alert_if: ^Red\b
     fulltext: false
     enabled: true
     note: Global Disaster Alert and Coordination System (UN/EU); green alerts are skipped
@@ -612,7 +612,7 @@ sources:
     url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.atom
     category: disaster
     lang: en
-    alert_if: '^M (6\.[5-9]|[7-9]\.\d)'
+    alert_if: ^M (6\.[5-9]|[7-9]\.\d)
     fulltext: false
     enabled: true
     note: magnitude 4.5+ in the last day; alert at 6.5+
@@ -622,9 +622,9 @@ sources:
     url: https://earthquake.tmd.go.th/feed/rss_tmd.xml
     category: disaster
     lang: th
-    prefix_regex: 'ขนาด\s*([\d.]+)'
+    prefix_regex: ขนาด\s*([\d.]+)
     prefix: 'แผ่นดินไหว ขนาด {0} · '
-    alert_if: 'ขนาด\s*([5-9]\.\d)'
+    alert_if: ขนาด\s*([5-9]\.\d)
     fulltext: false
     enabled: true
     note: Thai Meteorological Department, quakes near Thailand; alert at 5.0+
@@ -636,7 +636,7 @@ sources:
     category: disaster
     lang: en
     fulltext: false
-    enabled: false
+    enabled: true
 
   - id: un-peace
     name: UN News Peace and Security
