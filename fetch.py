@@ -131,7 +131,15 @@ def http_get(url: str, accept: str = ACCEPT) -> bytes:
 
 # ---------- RSS / Atom ----------
 
+IMAGE_PLACEHOLDERS = ("bangkokpost.com/v3/assets/images/img-default",)
+
+
 def entry_image(entry) -> str | None:
+    url = _entry_image(entry)
+    return None if url and any(p in url for p in IMAGE_PLACEHOLDERS) else url
+
+
+def _entry_image(entry) -> str | None:
     for m in entry.get("media_content") or []:
         url = m.get("url")
         if not url:
@@ -206,6 +214,9 @@ def parse_news_sitemap(source: dict, content: bytes) -> list[dict]:
             continue  # category pages etc.
         pub = parse_iso(u.findtext("news:news/news:publication_date", namespaces=SITEMAP_NS))
         image = (u.findtext("image:image/image:loc", namespaces=SITEMAP_NS) or "").strip() or None
+        if image and "media.nationthailand.com/" in image and "/uploads/images/" not in image:
+            # the sitemap drops the path prefix; the real file lives under /uploads/images/md/
+            image = re.sub(r"media\.nationthailand\.com/(\d{4}/\d{2}/)", r"media.nationthailand.com/uploads/images/md/\1", image)
         items.append({
             "id": make_id(loc),
             "url": loc,
@@ -330,7 +341,7 @@ def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
             if not a.get("image_url"):
                 meta = trafilatura.extract_metadata(html_text)
                 image = getattr(meta, "image", None) if meta else None
-                if image and image.startswith("https://"):
+                if image and image.startswith("https://") and not any(p in image for p in IMAGE_PLACEHOLDERS):
                     a["image_url"] = image
                     bump("images")
 
