@@ -155,7 +155,7 @@ sources:
   type: news-sitemap
   note: no RSS; Google News sitemap has title, date, link, image (no summary)
 - id: bbc-asia-test
-  name: BBC Asia (test)
+  name: BBC Asia renamed
   url: https://feeds.bbci.co.uk/news/world/asia/rss.xml
   category: world
   lang: en
