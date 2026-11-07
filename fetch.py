@@ -266,7 +266,7 @@ def fetch_source(source: dict) -> list[dict]:
 
 FULLTEXT_MAX_PER_RUN = int(os.environ.get("FULLTEXT_MAX_PER_RUN", "120"))
 FULLTEXT_BUDGET_S = int(os.environ.get("FULLTEXT_BUDGET_S", "150"))
-FULLTEXT_WORKERS = 6       # different hosts in parallel; one host is always sequential
+FULLTEXT_WORKERS = 10      # different hosts in parallel; one host is always sequential
 HOST_DELAY_S = 1.5         # pause between pages on the same host
 CONTENT_MIN = 400          # shorter extractions are treated as failures (paywall, video page...)
 ROBOTS_AGENT = "MeeNews"
@@ -643,17 +643,25 @@ def cmd_run(args) -> int:
     prev_status = read_json(data_dir / "status.json") or {}
     prev_src = {s["id"]: s for s in prev_status.get("sources", [])}
 
+    def try_fetch(source: dict):
+        try:
+            return fetch_source(source), None
+        except Exception as e:  # noqa: BLE001 - one bad source must not stop the run
+            return None, str(e) if isinstance(e, FetchError) else f"{type(e).__name__}: {str(e)[:200]}"
+
+    sources = load_sources(args.sources)
+    with ThreadPoolExecutor(max_workers=10) as pool:  # feeds are on different hosts: fetch them together
+        fetched = list(pool.map(try_fetch, sources))
+
     src_status = []
-    for s in load_sources(args.sources):
+    for s, (items, error) in zip(sources, fetched):
         st = {
             "id": s["id"], "name": s["name"], "category": s.get("category", ""), "lang": s.get("lang", ""),
             "ok": False, "count": 0, "new": 0, "error": None,
             "last_ok_at": prev_src.get(s["id"], {}).get("last_ok_at"),
         }
-        try:
-            items = fetch_source(s)
-        except Exception as e:  # noqa: BLE001 - one bad source must not stop the run
-            st["error"] = str(e) if isinstance(e, FetchError) else f"{type(e).__name__}: {str(e)[:200]}"
+        if error is not None:
+            st["error"] = error
             print(f"[FAIL] {s['name']}: {st['error']}", flush=True)
             src_status.append(st)
             continue
