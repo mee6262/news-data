@@ -159,4 +159,4 @@ sources:
   url: https://feeds.bbci.co.uk/news/world/asia/rss.xml
   category: world
   lang: en
-  enabled: true
+  enabled: false
