@@ -9,170 +9,154 @@
 # fulltext: false -> never fetch the article page for full text (default: fetch when the feed has none)
 
 sources:
-  - id: bbc-world
-    name: BBC World
-    url: https://feeds.bbci.co.uk/news/world/rss.xml
-    category: world
-    lang: en
-    enabled: true
-
-  - id: bbc-tech
-    name: BBC Technology
-    url: https://feeds.bbci.co.uk/news/technology/rss.xml
-    category: tech
-    lang: en
-    enabled: true
-
-  - id: bbc-business
-    name: BBC Business
-    url: https://feeds.bbci.co.uk/news/business/rss.xml
-    category: business
-    lang: en
-    enabled: true
-
-  - id: bbc-science
-    name: BBC Science
-    url: https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
-    category: science
-    lang: en
-    enabled: true
-
-  - id: dw-en
-    name: DW English
-    url: https://rss.dw.com/rdf/rss-en-all
-    category: world
-    lang: en
-    enabled: true
-
-  - id: dw-es
-    name: DW Spanish
-    url: https://rss.dw.com/rdf/rss-sp-all
-    category: world
-    lang: es
-    enabled: true
-
-  - id: dw-ru
-    name: DW Russian
-    url: https://rss.dw.com/xml/rss-ru-rus
-    category: world
-    lang: ru
-    enabled: true
-
-  - id: dw-zh
-    name: DW Chinese
-    url: https://rss.dw.com/xml/rss-chi-all
-    category: world
-    lang: zh
-    enabled: true
-
-  - id: aljazeera
-    name: Al Jazeera
-    url: https://www.aljazeera.com/xml/rss/all.xml
-    category: world
-    lang: en
-    enabled: true
-
-  - id: sky-world
-    name: Sky News World
-    url: https://feeds.skynews.com/feeds/rss/world.xml
-    category: world
-    lang: en
-    enabled: true
-
-  - id: guardian-world
-    name: The Guardian World
-    url: https://www.theguardian.com/world/rss
-    category: world
-    lang: en
-    enabled: true
-
-  - id: france24-en
-    name: France 24 EN
-    url: https://www.france24.com/en/rss
-    category: world
-    lang: en
-    enabled: true
-
-  - id: france24-fr
-    name: France 24 FR
-    url: https://www.france24.com/fr/rss
-    category: world
-    lang: fr
-    enabled: true
-
-  - id: bangkokpost-opinion
-    name: Bangkok Post Opinion
-    url: https://www.bangkokpost.com/rss/data/opinion.xml
-    category: th
-    lang: en
-    enabled: true
-
-  - id: npr-world
-    name: NPR World
-    url: https://feeds.npr.org/1004/rss.xml
-    category: world
-    lang: en
-    enabled: true
-    note: may be blocked outside the US
-
-  - id: reuters-gn
-    name: Reuters (via Google News)
-    url: https://news.google.com/rss/search?q=site:reuters.com+when:2h&hl=en-US&gl=US&ceid=US:en
-    category: world
-    lang: en
-    enabled: true
-    id_from: guid
-    no_summary: true
-    title_suffix: " - Reuters"
-    fulltext: false
-    note: titles only, no full text
-
-  - id: ap-gn
-    name: AP (via Google News)
-    url: https://news.google.com/rss/search?q=site:apnews.com+when:2h&hl=en-US&gl=US&ceid=US:en
-    category: world
-    lang: en
-    enabled: true
-    id_from: guid
-    no_summary: true
-    title_suffix: " - AP News"
-    fulltext: false
-    note: titles only, no full text
-
-  # ---- Thai sources added 2026-11-07 ----
-  - id: bangkokpost-thailand
-    name: Bangkok Post Thailand
-    url: https://www.bangkokpost.com/rss/data/thailand.xml
-    category: th
-    lang: en
-    enabled: true
-
-  - id: bangkokpost-world
-    name: Bangkok Post World
-    url: https://www.bangkokpost.com/rss/data/world.xml
-    category: world
-    lang: en
-    enabled: true
-
-  - id: bangkokpost-business
-    name: Bangkok Post Business
-    url: https://www.bangkokpost.com/rss/data/business.xml
-    category: business
-    lang: en
-    enabled: true
-
-  - id: thaiger
-    name: The Thaiger
-    url: https://thethaiger.com/feed
-    category: th
-    lang: en
-    enabled: true
-
-  - id: nation-th
-    name: The Nation Thailand
-    url: https://api.nationthailand.com/sitemap/latest
-    category: th
-    lang: en
-    enabled: true
-    type: news-sitemap
-    note: no RSS; Google News sitemap has title, date, link, image (no summary)
+- id: bbc-world
+  name: BBC World
+  url: https://feeds.bbci.co.uk/news/world/rss.xml
+  category: world
+  lang: en
+  enabled: true
+- id: bbc-tech
+  name: BBC Technology
+  url: https://feeds.bbci.co.uk/news/technology/rss.xml
+  category: tech
+  lang: en
+  enabled: true
+- id: bbc-business
+  name: BBC Business
+  url: https://feeds.bbci.co.uk/news/business/rss.xml
+  category: business
+  lang: en
+  enabled: true
+- id: bbc-science
+  name: BBC Science
+  url: https://feeds.bbci.co.uk/news/science_and_environment/rss.xml
+  category: science
+  lang: en
+  enabled: true
+- id: dw-en
+  name: DW English
+  url: https://rss.dw.com/rdf/rss-en-all
+  category: world
+  lang: en
+  enabled: true
+- id: dw-es
+  name: DW Spanish
+  url: https://rss.dw.com/rdf/rss-sp-all
+  category: world
+  lang: es
+  enabled: true
+- id: dw-ru
+  name: DW Russian
+  url: https://rss.dw.com/xml/rss-ru-rus
+  category: world
+  lang: ru
+  enabled: true
+- id: dw-zh
+  name: DW Chinese
+  url: https://rss.dw.com/xml/rss-chi-all
+  category: world
+  lang: zh
+  enabled: true
+- id: aljazeera
+  name: Al Jazeera
+  url: https://www.aljazeera.com/xml/rss/all.xml
+  category: world
+  lang: en
+  enabled: true
+- id: sky-world
+  name: Sky News World
+  url: https://feeds.skynews.com/feeds/rss/world.xml
+  category: world
+  lang: en
+  enabled: true
+- id: guardian-world
+  name: The Guardian World
+  url: https://www.theguardian.com/world/rss
+  category: world
+  lang: en
+  enabled: true
+- id: france24-en
+  name: France 24 EN
+  url: https://www.france24.com/en/rss
+  category: world
+  lang: en
+  enabled: true
+- id: france24-fr
+  name: France 24 FR
+  url: https://www.france24.com/fr/rss
+  category: world
+  lang: fr
+  enabled: true
+- id: bangkokpost-opinion
+  name: Bangkok Post Opinion
+  url: https://www.bangkokpost.com/rss/data/opinion.xml
+  category: th
+  lang: en
+  enabled: true
+- id: npr-world
+  name: NPR World
+  url: https://feeds.npr.org/1004/rss.xml
+  category: world
+  lang: en
+  enabled: true
+  note: may be blocked outside the US
+- id: reuters-gn
+  name: Reuters (via Google News)
+  url: https://news.google.com/rss/search?q=site:reuters.com+when:2h&hl=en-US&gl=US&ceid=US:en
+  category: world
+  lang: en
+  enabled: true
+  id_from: guid
+  no_summary: true
+  title_suffix: ' - Reuters'
+  fulltext: false
+  note: titles only, no full text
+- id: ap-gn
+  name: AP (via Google News)
+  url: https://news.google.com/rss/search?q=site:apnews.com+when:2h&hl=en-US&gl=US&ceid=US:en
+  category: world
+  lang: en
+  enabled: true
+  id_from: guid
+  no_summary: true
+  title_suffix: ' - AP News'
+  fulltext: false
+  note: titles only, no full text
+- id: bangkokpost-thailand
+  name: Bangkok Post Thailand
+  url: https://www.bangkokpost.com/rss/data/thailand.xml
+  category: th
+  lang: en
+  enabled: true
+- id: bangkokpost-world
+  name: Bangkok Post World
+  url: https://www.bangkokpost.com/rss/data/world.xml
+  category: world
+  lang: en
+  enabled: true
+- id: bangkokpost-business
+  name: Bangkok Post Business
+  url: https://www.bangkokpost.com/rss/data/business.xml
+  category: business
+  lang: en
+  enabled: true
+- id: thaiger
+  name: The Thaiger
+  url: https://thethaiger.com/feed
+  category: th
+  lang: en
+  enabled: true
+- id: nation-th
+  name: The Nation Thailand
+  url: https://api.nationthailand.com/sitemap/latest
+  category: th
+  lang: en
+  enabled: true
+  type: news-sitemap
+  note: no RSS; Google News sitemap has title, date, link, image (no summary)
+- id: bbc-asia-test
+  name: BBC Asia (test)
+  url: https://feeds.bbci.co.uk/news/world/asia/rss.xml
+  category: world
+  lang: en
+  enabled: true
