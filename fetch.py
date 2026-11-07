@@ -175,6 +175,17 @@ def entry_published(entry) -> datetime | None:
     return None
 
 
+def entry_categories(e) -> list[str]:
+    """The publisher's own section labels (<category>, <dc:subject>). CNA packs several into one: 'East Asia ,Asia'."""
+    out = []
+    for t in e.get("tags") or []:
+        for part in (t.get("term") or "").split(","):
+            part = clean_text(part)
+            if part and part not in out:
+                out.append(part)
+    return out[:15]
+
+
 def parse_rss(source: dict, content: bytes) -> list[dict]:
     feed = feedparser.parse(content)
     if not feed.entries:
@@ -209,6 +220,7 @@ def parse_rss(source: dict, content: bytes) -> list[dict]:
             "content": content,
             "image_url": image,
             "published_at": iso(entry_published(e)),
+            "feed_cats": entry_categories(e),
         }
         if content:  # full text came with the feed: take its images/videos from the same HTML
             raw = next((c.get("value") for c in e.get("content") or [] if c.get("value")), "")
@@ -267,10 +279,57 @@ def fetch_source(source: dict) -> list[dict]:
     items = parser(source, http_get(source["url"]))
     for it in items:
         it["source_id"] = source["id"]
-        it["category"] = source.get("category", "")
+        it["category"] = category_for(it, source)
         it["lang"] = source.get("lang", "")
         mark(it, source)
     return items
+
+
+# ---------- categories ----------
+# Broad source categories. A story from such a source goes where the publisher filed it
+# (its <category> labels), else where a section feed carrying the same story puts it.
+GENERAL_CATEGORIES = {"world", "th", "asia", ""}
+
+# Publisher labels (lower case) -> our category. First match in CATEGORY_ORDER wins.
+FEED_CATEGORY_MAP = {
+    "sport": ["sport", "sports", "deportes", "спорт", "体育", "sport slide", "café des sports", "football", "soccer",
+              "tennis", "golf", "sumo", "boxing", "formula 1", "กีฬา", "กีฬาในประเทศ", "กีฬาต่างประเทศ", "ฟุตบอล",
+              "ฟุตบอลไทย", "ฟุตบอลต่างประเทศ", "มวย", "วอลเลย์บอล"],
+    "entertainment": ["entertainment", "pop", "culture", "cultura", "культура", "文化", "film", "movies", "music",
+                      "television", "celebrity", "arts", "บันเทิง", "บันเทิงไทย", "บันเทิงต่างประเทศ", "ข่าวบันเทิง",
+                      "ดารา", "ละคร", "ภาพยนตร์", "เพลง"],
+    "tech": ["technology", "tech", "科技创新", "ไอที", "เทคโนโลยี", "ข่าวไอที"],
+    "science": ["science", "ciencia y ecología", "наука", "วิทยาศาสตร์"],
+    "health": ["health", "สุขภาพ", "ข่าวสุขภาพ"],
+    "environment": ["environment", "climate", "sustainability", "สิ่งแวดล้อม"],
+    "business": ["business", "economy", "economic", "economy news", "economía", "экономика", "经济", "markets",
+                 "finance", "wealth", "money", "เศรษฐกิจ", "ธุรกิจ", "ข่าวธุรกิจ", "การเงิน", "หุ้น", "การตลาด"],
+    # Thai sources only: "politics" in a world feed is world news
+    "politics": ["การเมือง", "ข่าวการเมือง", "politics", "thai politics"],
+    "asia": ["asia", "east asia", "southeast asia", "south and central asia", "asia pacific", "เอเชีย"],
+    "world": ["world", "world news", "international", "รอบโลก", "ต่างประเทศ", "ข่าวต่างประเทศ"],
+}
+CATEGORY_ORDER = list(FEED_CATEGORY_MAP)
+_LABEL_TO_CAT = {label: cat for cat, labels in FEED_CATEGORY_MAP.items() for label in labels}
+
+
+def feed_category(labels: list[str] | None, source_cat: str) -> str | None:
+    found = {_LABEL_TO_CAT.get(l.strip().lower()) for l in labels or []} - {None}
+    if source_cat != "th":
+        found.discard("politics")
+    if source_cat == "world":
+        found.discard("world")
+    for cat in CATEGORY_ORDER:
+        if cat in found:
+            return cat
+    return None
+
+
+def category_for(a: dict, source: dict | None) -> str:
+    src_cat = (source or {}).get("category", a.get("category", ""))
+    if src_cat not in GENERAL_CATEGORIES:
+        return src_cat  # a section source (BBC Sport, Variety...): always its own category
+    return feed_category(a.get("feed_cats"), src_cat) or a.get("section_cat") or src_cat
 
 
 # ---------- topics and urgent alerts ----------
@@ -681,29 +740,6 @@ def load_articles(news_dir: Path) -> dict[str, dict]:
     return articles
 
 
-# Broad categories: a story there moves to a section category when a section feed also carries it.
-GENERAL_CATEGORIES = {"world", "th", ""}
-
-
-def recategorize(articles: dict[str, dict], sources: list[dict]) -> int:
-    """Stored stories follow their source when its category is changed in sources.yaml."""
-    cat_of = {s["id"]: s.get("category", "") for s in sources}
-    changed = 0
-    for a in articles.values():
-        new = cat_of.get(a.get("source_id"))
-        cur = a.get("category", "")
-        if new is None or new == cur:
-            continue
-        # a section category the story got from a second feed is kept (unless the source itself is specific)
-        if cur not in GENERAL_CATEGORIES and new in GENERAL_CATEGORIES:
-            continue
-        a["category"] = new
-        changed += 1
-    if changed:
-        print(f"recategorized {changed} stored stories", flush=True)
-    return changed
-
-
 def set_output(name: str, value: str) -> None:
     out = os.environ.get("GITHUB_OUTPUT")
     if out:
@@ -720,10 +756,6 @@ def cmd_run(args) -> int:
 
     articles = load_articles(news_dir)
     before = len(articles)
-    all_sources = {s["id"]: s for s in load_sources(args.sources, include_disabled=True)}
-    recategorize(articles, list(all_sources.values()))
-    for a in articles.values():
-        mark(a, all_sources.get(a.get("source_id")))
     prev_status = read_json(data_dir / "status.json") or {}
     prev_src = {s["id"]: s for s in prev_status.get("sources", [])}
 
@@ -756,12 +788,26 @@ def cmd_run(args) -> int:
                 articles[it["id"]] = it
                 st["new"] += 1
             else:
-                # same story in a broad feed and a section feed (e.g. Matichon + Matichon Sport): keep the section
-                old_cat = articles[it["id"]].get("category", "")
-                if old_cat in GENERAL_CATEGORIES and it["category"] not in GENERAL_CATEGORIES:
-                    articles[it["id"]]["category"] = it["category"]
+                old = articles[it["id"]]
+                # same story in a broad feed and a section feed (e.g. Matichon + Matichon Sport): note the section
+                if s.get("category", "") not in GENERAL_CATEGORIES:
+                    old["section_cat"] = s["category"]
+                elif it.get("feed_cats") and not old.get("feed_cats"):
+                    old["feed_cats"] = it["feed_cats"]
         print(f"[ OK ] {s['name']}: {st['count']} items, {st['new']} new", flush=True)
         src_status.append(st)
+
+    # category and topic tags for every stored story (follows sources.yaml and the rules above)
+    all_sources = {x["id"]: x for x in load_sources(args.sources, include_disabled=True)}
+    moved = 0
+    for a in articles.values():
+        src = all_sources.get(a.get("source_id"))
+        cat = category_for(a, src)
+        if cat != a.get("category"):
+            a["category"] = cat
+            moved += 1
+        mark(a, src)
+    print(f"categories: {moved} stories moved", flush=True)
 
     fulltext_stats = None
     if os.environ.get("FULLTEXT", "1") == "1":
