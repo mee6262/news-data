@@ -849,7 +849,7 @@ def set_output(name: str, value: str) -> None:
 # status.json ("translate.limited"), and the app shows a warning; untranslated stories fall
 # back to the in-browser translator.
 TR_BUDGET_CHARS = int(os.environ.get("TRANSLATE_BUDGET_CHARS", "300000"))  # per run
-TR_BUDGET_SECONDS = int(os.environ.get("TRANSLATE_BUDGET_SECONDS", "240"))
+TR_BUDGET_SECONDS = int(os.environ.get("TRANSLATE_BUDGET_SECONDS", "90"))  # keeps a run near 2 billed minutes (Actions quota)
 TR_CONTENT_DAYS = 2           # full text: only stories fetched in the last 2 days
 TR_BATCH_CHARS = 4000         # one request
 TR_BATCH_ITEMS = 40
