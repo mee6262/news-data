@@ -78,6 +78,7 @@ def make_id(key: str) -> str:
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"[ \t\r\f\v]+")
+_INVISIBLE_RE = re.compile("[\u200b\u200c\u200d\u2060\ufeff\u00ad]")
 
 
 def clean_text(value: str | None) -> str:
@@ -85,6 +86,7 @@ def clean_text(value: str | None) -> str:
         return ""
     text = _TAG_RE.sub(" ", value)
     text = html.unescape(text)
+    text = _INVISIBLE_RE.sub("", text)
     text = _WS_RE.sub(" ", text)
     return "\n".join(line.strip() for line in text.splitlines() if line.strip())
 
@@ -289,6 +291,11 @@ def _robots_for(host: str) -> RobotFileParser | None:
 # ---------- images and videos inside articles ----------
 
 MEDIA_VERSION = 2          # bump to re-scan pages when the media rules change
+DW_MEDIA_VERSION = 3       # DW pages got their own reader (images + HLS videos)
+
+
+def media_version_for(a: dict) -> int:
+    return DW_MEDIA_VERSION if urlparse(a.get("url", "")).netloc.endswith("dw.com") else MEDIA_VERSION
 MAX_IMAGES = 8
 _IMG_SKIP = re.compile(r"(logo|icon|avatar|placeholder|spacer|pixel|1x1|blank|sprite|badge|byline)", re.I)
 _YT = re.compile(r"(?:youtube(?:-nocookie)?\.com/(?:embed/|watch\?v=|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})")
@@ -368,6 +375,74 @@ def extract_article(trafilatura, html_text: str, url: str, cover: str | None) ->
     return paras, images
 
 
+_DW_STATE = re.compile(r"window\.__APP_STATE__\s*=\s*(\{.*?\});?\s*</script>", re.S)
+_DW_TOKENS = re.compile(
+    r"(?P<fig><figure[^>]*placeholder-image[^>]*>.*?</figure>)"
+    r"|(?P<vid><div[^>]*class=\"[^\"]*vjs-wrapper[^\"]*\"[^>]*>)"
+    r"|(?P<blk><(?P<tag>p|h2|h3|li|blockquote)\b[^>]*>.*?</(?P=tag)>)",
+    re.S,
+)
+
+
+def dw_extract(html_text: str) -> tuple[list[str], list[dict], str | None] | None:
+    """DW pages carry the article as JSON (window.__APP_STATE__): body HTML with
+    placeholders for images/videos, plus the media they stand for, in order.
+    Returns (paragraphs, media, cover image) or None if the page is not a DW article."""
+    m = _DW_STATE.search(html_text)
+    if not m:
+        return None
+    try:
+        state = json.loads(m.group(1))
+    except ValueError:
+        return None
+    content = next((v.get("data", {}).get("content") for k, v in state.items()
+                    if "/content/article/" in k and isinstance(v, dict)), None)
+    if not isinstance(content, dict) or not content.get("text"):
+        return None
+    links = content.get("contentLinks") or []
+    images = [l for l in links if l.get("targetType") == "IMAGE" and l.get("isInText")]
+    videos_by_id = {v.get("id"): v for v in content.get("videos") or [] if v.get("hlsVideoSrc")}
+    in_text_video_ids = [l.get("targetId") for l in links if l.get("targetType") == "VIDEO" and l.get("isInText")]
+
+    def video(v: dict, pos: int) -> dict | None:
+        src = v.get("hlsVideoSrc") or ""
+        if not src.startswith("https://"):
+            return None
+        poster = v.get("posterImageUrl") or ""
+        return {"t": "hls", "src": src, "poster": poster if poster.startswith("https://") else "",
+                "title": (v.get("title") or "")[:200], "dur": v.get("formattedDuration") or "", "pos": pos}
+
+    paras: list[str] = []
+    media: list[dict] = []
+    img_i = vid_i = 0
+    for tok in _DW_TOKENS.finditer(content["text"]):
+        if tok.group("fig"):
+            if img_i < len(images):
+                link = images[img_i]
+                media.append({"t": "img", "src": f"https://static.dw.com/image/{link['targetId']}_6.jpg",
+                              "alt": (link.get("description") or link.get("name") or "")[:200], "pos": len(paras)})
+            img_i += 1
+        elif tok.group("vid"):
+            if vid_i < len(in_text_video_ids) and in_text_video_ids[vid_i] in videos_by_id:
+                v = video(videos_by_id[in_text_video_ids[vid_i]], len(paras))
+                if v:
+                    media.append(v)
+            vid_i += 1
+        else:
+            text = clean_text(tok.group("blk")).replace("\n", " ")
+            if text:
+                paras.append(text)
+    # the article's main video (not placed in the text) goes first
+    for vid, v in videos_by_id.items():
+        if vid not in in_text_video_ids:
+            main = video(v, 0)
+            if main:
+                media.insert(0, main)
+    cover_id = (content.get("mainContentImage") or {}).get("id")
+    cover = f"https://static.dw.com/image/{cover_id}_6.jpg" if cover_id else None
+    return paras, media[: MAX_IMAGES + 3], cover
+
+
 def page_videos(html_text: str) -> list[dict]:
     """YouTube embeds and og:video mp4 files on a page (filtered later for site-wide promos)."""
     videos, seen = [], set()
@@ -443,7 +518,7 @@ def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
         if not a.get("content") and not a.get("fulltext"):
             return True  # never tried
         # page already read for text, but before images/videos were collected
-        return a.get("fulltext") in ("ok", "empty") and a.get("media_v", 0) < MEDIA_VERSION
+        return a.get("fulltext") in ("ok", "empty") and a.get("media_v", 0) < media_version_for(a)
 
     todo = [a for a in articles.values() if wanted(a)]
     todo.sort(key=lambda a: a["fetched_at"], reverse=True)  # newest first, old ones backfill later
@@ -480,6 +555,29 @@ def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
                 bump("fail")
                 continue
             had_text = bool(a.get("content"))
+            dw = dw_extract(html_text) if host.endswith("dw.com") else None
+            if dw:
+                paras, media, cover = dw
+                if not a.get("image_url") and cover:
+                    a["image_url"] = cover
+                    bump("images")
+                text = "\n".join(paras)
+                if len(text) >= CONTENT_MIN:
+                    a["content"] = truncate(text, CONTENT_MAX)
+                    a["fulltext"] = "ok"
+                    bump("ok")
+                    if not a.get("summary"):
+                        a["summary"] = _first_paragraph(text)
+                elif not had_text:
+                    a["fulltext"] = "empty"
+                    bump("empty")
+                a["media"] = [m for m in media if m["t"] != "img" or not _same_image(m["src"], a.get("image_url"))]
+                a["media_v"] = media_version_for(a)
+                if any(m["t"] == "img" for m in a["media"]):
+                    bump("with_media_images")
+                if any(m["t"] != "img" for m in a["media"]):
+                    bump("with_videos")
+                continue
             if not a.get("image_url"):
                 meta = trafilatura.extract_metadata(html_text)
                 image = getattr(meta, "image", None) if meta else None
@@ -502,7 +600,7 @@ def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
                 images = [dict(img, pos=0) for img in images]  # no text to place them in
             media = images + page_videos(html_text)
             a["media"] = media
-            a["media_v"] = MEDIA_VERSION
+            a["media_v"] = media_version_for(a)
             if images:
                 bump("with_media_images")
             if any(m["t"] != "img" for m in media):
