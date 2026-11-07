@@ -288,7 +288,7 @@ def _robots_for(host: str) -> RobotFileParser | None:
 
 # ---------- images and videos inside articles ----------
 
-MEDIA_VERSION = 1          # bump to re-scan pages when the media rules change
+MEDIA_VERSION = 2          # bump to re-scan pages when the media rules change
 MAX_IMAGES = 8
 _IMG_SKIP = re.compile(r"(logo|icon|avatar|placeholder|spacer|pixel|1x1|blank|sprite|badge|byline)", re.I)
 _YT = re.compile(r"(?:youtube(?:-nocookie)?\.com/(?:embed/|watch\?v=|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})")
@@ -296,8 +296,16 @@ _OG_VIDEO = re.compile(r'<meta[^>]+property=["\']og:video(?::secure_url|:url)?["
 _FEED_IMG = re.compile(r'<img[^>]+src=["\'](https://[^"\']+)["\']', re.I)
 
 
+_SIZE_TOKENS = re.compile(r"(/(?:standard|ws)/\d+/|/w:\d+/|/w\d{3,4}/|_\d{3,4}(?=\.\w+$)|/\d+x\d+/|/(?:md|lg|sm)/)")
+
+
+def _img_key(url: str) -> str:
+    """Same picture at different sizes -> same key (BBC /standard/976/, Bangkok Post _800, France 24 w:1024...)."""
+    return _SIZE_TOKENS.sub("/", urlparse(url).path.lower())
+
+
 def _same_image(a: str | None, b: str | None) -> bool:
-    return bool(a and b) and urlparse(a).path == urlparse(b).path
+    return bool(a and b) and _img_key(a) == _img_key(b)
 
 
 def _good_image(src: str | None, cover: str | None) -> bool:
@@ -331,7 +339,7 @@ def extract_article(trafilatura, html_text: str, url: str, cover: str | None) ->
 
     def add_image(g) -> None:
         src = (g.get("src") or "").strip()
-        key = urlparse(src).path
+        key = _img_key(src)
         if len(images) < MAX_IMAGES and key not in seen and _good_image(src, cover):
             seen.add(key)
             images.append({"t": "img", "src": src, "alt": (g.get("alt") or g.get("title") or "")[:200], "pos": len(paras)})
@@ -386,9 +394,9 @@ def feed_media(raw_html: str | None, cover: str | None) -> list[dict]:
     media, seen = [], set()
     for m in _FEED_IMG.finditer(raw_html):
         src = html.unescape(m.group(1))
-        if len([x for x in media if x["t"] == "img"]) >= MAX_IMAGES or urlparse(src).path in seen or not _good_image(src, cover):
+        if len([x for x in media if x["t"] == "img"]) >= MAX_IMAGES or _img_key(src) in seen or not _good_image(src, cover):
             continue
-        seen.add(urlparse(src).path)
+        seen.add(_img_key(src))
         before = clean_text(raw_html[: m.start()])
         media.append({"t": "img", "src": src, "alt": "", "pos": len(before.split("\n")) if before else 0})
     for m in _YT.finditer(raw_html):
