@@ -1,0 +1,15 @@
+{
+ "request_id": "705e4abf0e0a79b8",
+ "url": "https://www.thaipbs.or.th/RSS/index.xml",
+ "type": "rss",
+ "tested_at": "2026-11-07T06:31:25Z",
+ "ok": false,
+ "status": "FAIL",
+ "items": null,
+ "with_summary": null,
+ "with_content": null,
+ "with_image": null,
+ "age_hours": null,
+ "error": "HTTP 404",
+ "notes": []
+}
