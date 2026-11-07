@@ -1,0 +1,63 @@
+name: test-source
+run-name: test-source ${{ inputs.request_id }}
+
+# Started by the MeeNews app to test a feed URL before it is added.
+# The result goes to result.json on the orphan `test-results` branch.
+# The home PC never fetches user-entered URLs itself.
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: "16 hex chars from the app"
+        required: true
+        type: string
+      url:
+        description: "https feed URL"
+        required: true
+        type: string
+      type:
+        description: "rss or news-sitemap"
+        required: false
+        default: rss
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: test-source
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # inputs go through env vars, never straight into the script
+      - name: Test URL
+        env:
+          IN_URL: ${{ inputs.url }}
+          IN_TYPE: ${{ inputs.type }}
+          IN_RID: ${{ inputs.request_id }}
+        run: python fetch.py test-url --url "$IN_URL" --type "$IN_TYPE" --request-id "$IN_RID" --out result.json
+
+      - name: Publish result (orphan commit + force push)
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          mkdir out && cp result.json out/ && cd out
+          git init -q -b test-results
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "test result"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" test-results:test-results

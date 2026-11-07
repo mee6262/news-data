@@ -532,6 +532,48 @@ def cmd_check(args) -> int:
     return 0
 
 
+# ---------- test-url: test one URL entered in the app (phase 4) ----------
+
+_REQUEST_ID = re.compile(r"^[a-f0-9]{16}$")
+
+
+def valid_feed_url(url: str) -> bool:
+    if not url or len(url) > 500 or any(ch.isspace() for ch in url):
+        return False
+    p = urlparse(url)
+    return p.scheme == "https" and bool(p.hostname) and "@" not in p.netloc
+
+
+def cmd_test_url(args) -> int:
+    url, kind, rid = args.url.strip(), args.type.strip() or "rss", args.request_id.strip()
+    result = {"request_id": rid, "url": url, "type": kind, "tested_at": iso(now_utc()), "ok": False}
+    if not _REQUEST_ID.match(rid):
+        result["error"] = "bad request id"
+    elif not valid_feed_url(url):
+        result["error"] = "URL ต้องเป็น https และยาวไม่เกิน 500 ตัวอักษร"
+    elif kind not in PARSERS:
+        result["error"] = f"ไม่รู้จักชนิด {kind}"
+    else:
+        source = {"id": "test", "name": "test", "url": url, "type": kind, "enabled": False}
+        res = check_source(source)
+        result.update({k: res.get(k) for k in ("status", "items", "with_summary", "with_content",
+                                                "with_image", "age_hours", "error", "notes")})
+        result["ok"] = res["status"] in ("OK", "WARN")
+        if result["ok"]:
+            try:
+                items = fetch_source(source)
+                result["samples"] = [i["title"] for i in items[:3]]
+                if kind == "rss":
+                    meta = feedparser.parse(http_get(url)).feed
+                    result["feed_title"] = clean_text(meta.get("title"))[:100]
+                    result["feed_lang"] = (meta.get("language") or "")[:2].lower()
+            except Exception:  # noqa: BLE001 - extras only
+                pass
+    Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="MeeNews fetcher")
     p.add_argument("--sources", default="sources.yaml")
@@ -543,6 +585,12 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", default="docs/source-check.md")
     c.add_argument("--json", default="source-check.json")
     c.set_defaults(func=cmd_check)
+    t = sub.add_parser("test-url", help="test one feed URL (used by the test-source workflow)")
+    t.add_argument("--url", required=True)
+    t.add_argument("--type", default="rss")
+    t.add_argument("--request-id", required=True)
+    t.add_argument("--out", default="result.json")
+    t.set_defaults(func=cmd_test_url)
     args = p.parse_args(argv)
     return args.func(args)
 
