@@ -187,15 +187,28 @@ def parse_rss(source: dict, content: bytes) -> list[dict]:
         if suffix and title.endswith(suffix):
             title = title[: -len(suffix)].rstrip()
         key = e.get("id") if source.get("id_from") == "guid" else None
-        items.append({
+        content = truncate(entry_content(e), CONTENT_MAX)
+        image = entry_image(e)
+        item = {
             "id": make_id(key or link),
             "url": link,
             "title": title,
             "summary": "" if source.get("no_summary") else truncate(clean_text(e.get("summary")), SUMMARY_MAX),
-            "content": truncate(entry_content(e), CONTENT_MAX),
-            "image_url": entry_image(e),
+            "content": content,
+            "image_url": image,
             "published_at": iso(entry_published(e)),
-        })
+        }
+        if content:  # full text came with the feed: take its images/videos from the same HTML
+            raw = next((c.get("value") for c in e.get("content") or [] if c.get("value")), "")
+            media = feed_media(raw, image)
+            if not image:
+                first = next((m for m in media if m["t"] == "img"), None)
+                if first:
+                    item["image_url"] = first["src"]
+                    media.remove(first)
+            item["media"] = media
+            item["media_v"] = MEDIA_VERSION
+        items.append(item)
     return items
 
 
@@ -273,6 +286,137 @@ def _robots_for(host: str) -> RobotFileParser | None:
     return rp
 
 
+# ---------- images and videos inside articles ----------
+
+MEDIA_VERSION = 1          # bump to re-scan pages when the media rules change
+MAX_IMAGES = 8
+_IMG_SKIP = re.compile(r"(logo|icon|avatar|placeholder|spacer|pixel|1x1|blank|sprite|badge|byline)", re.I)
+_YT = re.compile(r"(?:youtube(?:-nocookie)?\.com/(?:embed/|watch\?v=|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})")
+_OG_VIDEO = re.compile(r'<meta[^>]+property=["\']og:video(?::secure_url|:url)?["\'][^>]+content=["\']([^"\']+)', re.I)
+_FEED_IMG = re.compile(r'<img[^>]+src=["\'](https://[^"\']+)["\']', re.I)
+
+
+def _same_image(a: str | None, b: str | None) -> bool:
+    return bool(a and b) and urlparse(a).path == urlparse(b).path
+
+
+def _good_image(src: str | None, cover: str | None) -> bool:
+    if not src or not src.startswith("https://") or len(src) > 600:
+        return False
+    path = urlparse(src).path.lower()
+    if path.endswith((".svg", ".gif")) or _IMG_SKIP.search(path) or any(p in src for p in IMAGE_PLACEHOLDERS):
+        return False
+    return not _same_image(src, cover)
+
+
+def _block_text(el) -> str:
+    return re.sub(r"\s+", " ", "".join(el.itertext())).strip()
+
+
+def extract_article(trafilatura, html_text: str, url: str, cover: str | None) -> tuple[list[str], list[dict]]:
+    """Paragraphs and in-text images (with the paragraph index they follow) from a page."""
+    xml = trafilatura.extract(html_text, url=url, output_format="xml", include_images=True,
+                              include_comments=False, include_tables=False, favor_precision=True)
+    if not xml:
+        return [], []
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError:
+        text = trafilatura.extract(html_text, url=url, include_comments=False, include_tables=False,
+                                   favor_precision=True) or ""
+        return [line.strip() for line in text.splitlines() if line.strip()], []
+    paras: list[str] = []
+    images: list[dict] = []
+    seen: set[str] = set()
+
+    def add_image(g) -> None:
+        src = (g.get("src") or "").strip()
+        key = urlparse(src).path
+        if len(images) < MAX_IMAGES and key not in seen and _good_image(src, cover):
+            seen.add(key)
+            images.append({"t": "img", "src": src, "alt": (g.get("alt") or g.get("title") or "")[:200], "pos": len(paras)})
+
+    def walk(el) -> None:
+        for child in el:
+            if child.tag == "graphic":
+                add_image(child)
+            elif child.tag in ("p", "head", "item", "quote", "cell"):
+                text = _block_text(child)
+                if text:
+                    paras.append(text)
+                for g in child.iter("graphic"):
+                    add_image(g)
+            else:
+                walk(child)
+
+    walk(root.find("main") if root.find("main") is not None else root)
+    # drop leading bylines/"- Published" before the first real paragraph, keeping image positions in step
+    dropped = 0
+    while paras and len(paras[0]) < 40:
+        paras.pop(0)
+        dropped += 1
+    for img in images:
+        img["pos"] = max(0, img["pos"] - dropped)
+    return paras, images
+
+
+def page_videos(html_text: str) -> list[dict]:
+    """YouTube embeds and og:video mp4 files on a page (filtered later for site-wide promos)."""
+    videos, seen = [], set()
+    for m in _OG_VIDEO.finditer(html_text):
+        src = html.unescape(m.group(1)).strip()
+        yt = _YT.search(src)
+        if yt and yt.group(1) not in seen:
+            seen.add(yt.group(1))
+            videos.append({"t": "yt", "id": yt.group(1)})
+        elif src.startswith("https://") and urlparse(src).path.lower().endswith(".mp4") and src not in seen:
+            seen.add(src)
+            videos.append({"t": "mp4", "src": src})
+    for m in _YT.finditer(html_text):
+        if m.group(1) not in seen and len(videos) < 3:
+            seen.add(m.group(1))
+            videos.append({"t": "yt", "id": m.group(1)})
+    return videos
+
+
+def feed_media(raw_html: str | None, cover: str | None) -> list[dict]:
+    """Images and YouTube embeds inside a feed's content:encoded HTML."""
+    if not raw_html:
+        return []
+    media, seen = [], set()
+    for m in _FEED_IMG.finditer(raw_html):
+        src = html.unescape(m.group(1))
+        if len([x for x in media if x["t"] == "img"]) >= MAX_IMAGES or urlparse(src).path in seen or not _good_image(src, cover):
+            continue
+        seen.add(urlparse(src).path)
+        before = clean_text(raw_html[: m.start()])
+        media.append({"t": "img", "src": src, "alt": "", "pos": len(before.split("\n")) if before else 0})
+    for m in _YT.finditer(raw_html):
+        if m.group(1) not in seen:
+            seen.add(m.group(1))
+            media.append({"t": "yt", "id": m.group(1)})
+    return media
+
+
+def drop_promo_videos(articles: dict[str, dict]) -> int:
+    """A video found on 3+ articles of the same source is a site-wide promo, not news."""
+    counts: dict[tuple[str, str], int] = {}
+    for a in articles.values():
+        for m in a.get("media") or []:
+            if m["t"] in ("yt", "mp4"):
+                key = (a.get("source_id", ""), m.get("id") or m.get("src"))
+                counts[key] = counts.get(key, 0) + 1
+    promos = {k for k, n in counts.items() if n >= 3}
+    removed = 0
+    for a in articles.values():
+        media = a.get("media") or []
+        kept = [m for m in media if m["t"] == "img" or (a.get("source_id", ""), m.get("id") or m.get("src")) not in promos]
+        if len(kept) != len(media):
+            removed += len(media) - len(kept)
+            a["media"] = kept
+    return removed
+
+
 def _first_paragraph(text: str, limit: int = 320) -> str:
     for line in text.split("\n"):
         if len(line) > 60:
@@ -285,12 +429,15 @@ def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
     trafilatura. Each article is tried once (`fulltext` records the outcome)."""
     import trafilatura  # imported here so `check` does not need it
 
-    todo = [
-        a for a in articles.values()
-        if not a.get("content") and not a.get("fulltext")
-        and sources.get(a.get("source_id"), {}).get("fulltext", True)
-        and a.get("url", "").startswith("https://")
-    ]
+    def wanted(a: dict) -> bool:
+        if not sources.get(a.get("source_id"), {}).get("fulltext", True) or not a.get("url", "").startswith("https://"):
+            return False
+        if not a.get("content") and not a.get("fulltext"):
+            return True  # never tried
+        # page already read for text, but before images/videos were collected
+        return a.get("fulltext") in ("ok", "empty") and a.get("media_v", 0) < MEDIA_VERSION
+
+    todo = [a for a in articles.values() if wanted(a)]
     todo.sort(key=lambda a: a["fetched_at"], reverse=True)  # newest first, old ones backfill later
     todo = todo[:FULLTEXT_MAX_PER_RUN]
     by_host: dict[str, list[dict]] = {}
@@ -298,7 +445,8 @@ def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
         by_host.setdefault(urlparse(a["url"]).netloc, []).append(a)
 
     deadline = time.monotonic() + FULLTEXT_BUDGET_S
-    stats = {"tried": 0, "ok": 0, "empty": 0, "fail": 0, "robots": 0, "images": 0}
+    stats = {"tried": 0, "ok": 0, "empty": 0, "fail": 0, "robots": 0, "images": 0,
+             "with_media_images": 0, "with_videos": 0}
     lock = threading.Lock()
 
     def bump(key: str) -> None:
@@ -323,32 +471,40 @@ def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
                 a["fulltext"] = "fail"
                 bump("fail")
                 continue
-            text = trafilatura.extract(html_text, url=a["url"], include_comments=False,
-                                       include_tables=False, favor_precision=True) or ""
-            lines = [line.strip() for line in text.splitlines() if line.strip()]
-            while lines and len(lines[0]) < 40:  # drop leading bylines/"- Published" before the first paragraph
-                lines.pop(0)
-            text = "\n".join(lines)
-            if len(text) >= CONTENT_MIN:
-                a["content"] = truncate(text, CONTENT_MAX)
-                a["fulltext"] = "ok"
-                bump("ok")
-                if not a.get("summary"):
-                    a["summary"] = _first_paragraph(text)
-            else:
-                a["fulltext"] = "empty"
-                bump("empty")
+            had_text = bool(a.get("content"))
             if not a.get("image_url"):
                 meta = trafilatura.extract_metadata(html_text)
                 image = getattr(meta, "image", None) if meta else None
                 if image and image.startswith("https://") and not any(p in image for p in IMAGE_PLACEHOLDERS):
                     a["image_url"] = image
                     bump("images")
+            paras, images = extract_article(trafilatura, html_text, a["url"], a.get("image_url"))
+            text = "\n".join(paras)
+            if len(text) >= CONTENT_MIN:
+                # (re)write the text from the same extraction so image positions line up
+                a["content"] = truncate(text, CONTENT_MAX)
+                a["fulltext"] = "ok"
+                bump("ok")
+                if not a.get("summary"):
+                    a["summary"] = _first_paragraph(text)
+            elif not had_text:
+                a["fulltext"] = "empty"
+                bump("empty")
+            if not a.get("content"):
+                images = [dict(img, pos=0) for img in images]  # no text to place them in
+            media = images + page_videos(html_text)
+            a["media"] = media
+            a["media_v"] = MEDIA_VERSION
+            if images:
+                bump("with_media_images")
+            if any(m["t"] != "img" for m in media):
+                bump("with_videos")
 
     with ThreadPoolExecutor(max_workers=FULLTEXT_WORKERS) as pool:
         for future in [pool.submit(work, h, items) for h, items in by_host.items()]:
             future.result()
     stats["queued"] = len(todo)
+    stats["promo_videos_removed"] = drop_promo_videos(articles)
     return stats
 
 
