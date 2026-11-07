@@ -6,6 +6,7 @@
 # id_from: guid  -> dedupe by feed guid instead of link (for Google News redirects)
 # no_summary     -> ignore the feed summary (Google News summaries are link lists)
 # title_suffix   -> strip this from the end of titles
+# fulltext: false -> never fetch the article page for full text (default: fetch when the feed has none)
 
 sources:
   - id: bbc-world
@@ -123,6 +124,7 @@ sources:
     id_from: guid
     no_summary: true
     title_suffix: " - Reuters"
+    fulltext: false
     note: titles only, no full text
 
   - id: ap-gn
@@ -134,6 +136,7 @@ sources:
     id_from: guid
     no_summary: true
     title_suffix: " - AP News"
+    fulltext: false
     note: titles only, no full text
 
   # ---- Thai sources added 2026-11-07 ----

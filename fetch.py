@@ -18,11 +18,14 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+from urllib.robotparser import RobotFileParser
 
 import feedparser
 import requests
@@ -113,9 +116,12 @@ def load_sources(path: str | Path, include_disabled: bool = False) -> list[dict]
     return [s for s in sources if include_disabled or s.get("enabled", True)]
 
 
-def http_get(url: str) -> bytes:
+PAGE_ACCEPT = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
+
+
+def http_get(url: str, accept: str = ACCEPT) -> bytes:
     try:
-        r = requests.get(url, headers={"User-Agent": USER_AGENT, "Accept": ACCEPT}, timeout=TIMEOUT)
+        r = requests.get(url, headers={"User-Agent": USER_AGENT, "Accept": accept}, timeout=TIMEOUT)
     except requests.RequestException as e:
         raise FetchError(f"{type(e).__name__}: {str(e)[:200]}") from e
     if r.status_code != 200:
@@ -230,6 +236,108 @@ def fetch_source(source: dict) -> list[dict]:
     return items
 
 
+# ---------- full text from article pages (phase 3) ----------
+
+FULLTEXT_MAX_PER_RUN = int(os.environ.get("FULLTEXT_MAX_PER_RUN", "120"))
+FULLTEXT_BUDGET_S = int(os.environ.get("FULLTEXT_BUDGET_S", "150"))
+FULLTEXT_WORKERS = 6       # different hosts in parallel; one host is always sequential
+HOST_DELAY_S = 1.5         # pause between pages on the same host
+CONTENT_MIN = 400          # shorter extractions are treated as failures (paywall, video page...)
+ROBOTS_AGENT = "MeeNews"
+
+
+def _robots_for(host: str) -> RobotFileParser | None:
+    """robots.txt for https://host. None means 'allow all'."""
+    rp = RobotFileParser()
+    try:
+        r = requests.get(f"https://{host}/robots.txt", headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+    except requests.RequestException:
+        return None
+    if r.status_code in (404, 410):
+        return None
+    if r.status_code != 200:
+        rp.disallow_all = True
+        return rp
+    rp.parse(r.text.splitlines())
+    return rp
+
+
+def _first_paragraph(text: str, limit: int = 320) -> str:
+    for line in text.split("\n"):
+        if len(line) > 60:
+            return truncate(line, limit)
+    return truncate(text.replace("\n", " "), limit)
+
+
+def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
+    """Fetch article pages for items without content and extract the text with
+    trafilatura. Each article is tried once (`fulltext` records the outcome)."""
+    import trafilatura  # imported here so `check` does not need it
+
+    todo = [
+        a for a in articles.values()
+        if not a.get("content") and not a.get("fulltext")
+        and sources.get(a.get("source_id"), {}).get("fulltext", True)
+        and a.get("url", "").startswith("https://")
+    ]
+    todo.sort(key=lambda a: a["fetched_at"], reverse=True)  # newest first, old ones backfill later
+    todo = todo[:FULLTEXT_MAX_PER_RUN]
+    by_host: dict[str, list[dict]] = {}
+    for a in todo:
+        by_host.setdefault(urlparse(a["url"]).netloc, []).append(a)
+
+    deadline = time.monotonic() + FULLTEXT_BUDGET_S
+    stats = {"tried": 0, "ok": 0, "empty": 0, "fail": 0, "robots": 0, "images": 0}
+    lock = threading.Lock()
+
+    def bump(key: str) -> None:
+        with lock:
+            stats[key] += 1
+
+    def work(host: str, items: list[dict]) -> None:
+        rp = _robots_for(host)
+        for i, a in enumerate(items):
+            if time.monotonic() > deadline:
+                return  # left untouched: tried again next run
+            if rp is not None and not rp.can_fetch(ROBOTS_AGENT, a["url"]):
+                a["fulltext"] = "robots"
+                bump("robots")
+                continue
+            if i:
+                time.sleep(HOST_DELAY_S)
+            bump("tried")
+            try:
+                html_text = http_get(a["url"], PAGE_ACCEPT).decode("utf-8", errors="replace")
+            except FetchError:
+                a["fulltext"] = "fail"
+                bump("fail")
+                continue
+            text = trafilatura.extract(html_text, url=a["url"], include_comments=False,
+                                       include_tables=False, favor_precision=True) or ""
+            text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+            if len(text) >= CONTENT_MIN:
+                a["content"] = truncate(text, CONTENT_MAX)
+                a["fulltext"] = "ok"
+                bump("ok")
+                if not a.get("summary"):
+                    a["summary"] = _first_paragraph(text)
+            else:
+                a["fulltext"] = "empty"
+                bump("empty")
+            if not a.get("image_url"):
+                meta = trafilatura.extract_metadata(html_text)
+                image = getattr(meta, "image", None) if meta else None
+                if image and image.startswith("https://"):
+                    a["image_url"] = image
+                    bump("images")
+
+    with ThreadPoolExecutor(max_workers=FULLTEXT_WORKERS) as pool:
+        for future in [pool.submit(work, h, items) for h, items in by_host.items()]:
+            future.result()
+    stats["queued"] = len(todo)
+    return stats
+
+
 # ---------- run: merge into the data branch ----------
 
 def load_articles(news_dir: Path) -> dict[str, dict]:
@@ -282,6 +390,14 @@ def cmd_run(args) -> int:
         print(f"[ OK ] {s['name']}: {st['count']} items, {st['new']} new", flush=True)
         src_status.append(st)
 
+    fulltext_stats = None
+    if os.environ.get("FULLTEXT", "1") == "1":
+        sources_by_id = {s["id"]: s for s in load_sources(args.sources, include_disabled=True)}
+        t0 = time.monotonic()
+        fulltext_stats = fill_fulltext(articles, sources_by_id)
+        fulltext_stats["seconds"] = round(time.monotonic() - t0, 1)
+        print(f"full text: {fulltext_stats}", flush=True)
+
     # Group by fetch date and drop anything past retention.
     cutoff = run_at.date() - timedelta(days=RETENTION_DAYS)
     by_day: dict[str, list[dict]] = {}
@@ -329,6 +445,7 @@ def cmd_run(args) -> int:
         "new_articles": new_total,
         "articles_total": sum(f["count"] for f in index_files),
         "articles_before": before,
+        "fulltext": fulltext_stats,
         "sources": src_status,
     }, ensure_ascii=False, indent=1), encoding="utf-8")
 
