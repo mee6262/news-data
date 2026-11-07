@@ -842,6 +842,143 @@ def set_output(name: str, value: str) -> None:
             f.write(f"{name}={value}\n")
 
 
+# ---------- Thai translation (stored with each story, so every browser shows Thai) ----------
+# Google's free endpoints, tested from GitHub Actions on 2026-11-08 (tools/translate_probe.py):
+# dict-chrome-ex takes many texts per request; gtx (one text per request) is the backup.
+# When Google refuses (429, 403, a "sorry" page) the run stops translating, reports it in
+# status.json ("translate.limited"), and the app shows a warning; untranslated stories fall
+# back to the in-browser translator.
+TR_BUDGET_CHARS = int(os.environ.get("TRANSLATE_BUDGET_CHARS", "300000"))  # per run
+TR_BUDGET_SECONDS = int(os.environ.get("TRANSLATE_BUDGET_SECONDS", "240"))
+TR_CONTENT_DAYS = 2           # full text: only stories fetched in the last 2 days
+TR_BATCH_CHARS = 4000         # one request
+TR_BATCH_ITEMS = 40
+TR_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                            "(KHTML, like Gecko) Chrome/130 Safari/537.36"}
+
+
+class TranslateLimited(Exception):
+    """Google refused: rate limit or a block page."""
+
+
+def _tr_check(r: requests.Response) -> None:
+    if r.status_code in (429, 403) or "/sorry/" in r.url or (r.status_code == 200 and r.text.lstrip()[:1] not in "[{\""):
+        raise TranslateLimited(f"{r.status_code} {r.reason}" + (" (block page)" if r.status_code == 200 else ""))
+    r.raise_for_status()
+
+
+def _tr_dict_ext(texts: list[str]) -> list[str]:
+    r = requests.post("https://clients5.google.com/translate_a/t",
+                      params={"client": "dict-chrome-ex", "sl": "auto", "tl": "th"},
+                      data={"q": texts}, headers=TR_HEADERS, timeout=30)
+    _tr_check(r)
+    res = r.json()
+    if len(texts) == 1 and res and isinstance(res[0], str):
+        res = [res]  # one text may come back unwrapped
+    out = [x[0] if isinstance(x, list) else x for x in res]
+    if len(out) != len(texts) or not all(isinstance(x, str) for x in out):
+        raise ValueError(f"dict-chrome-ex: {len(out)} results for {len(texts)} texts")
+    return out
+
+
+def _tr_gtx(texts: list[str]) -> list[str]:
+    out = []
+    for t in texts:
+        r = requests.post("https://translate.googleapis.com/translate_a/single",
+                          params={"client": "gtx", "sl": "auto", "tl": "th", "dt": "t"},
+                          data={"q": t}, headers=TR_HEADERS, timeout=30)
+        _tr_check(r)
+        out.append("".join(seg[0] for seg in r.json()[0] if seg and seg[0]))
+    return out
+
+
+def translate_texts(texts: list[str]) -> tuple[list[str], str]:
+    """Thai for each text, and the engine used. Raises TranslateLimited when both engines refuse."""
+    try:
+        return [html.unescape(x).strip() for x in _tr_dict_ext(texts)], "dict-chrome-ex"
+    except (TranslateLimited, ValueError, requests.RequestException) as first:
+        try:
+            return [html.unescape(x).strip() for x in _tr_gtx(texts)], "gtx"
+        except TranslateLimited as e:
+            raise TranslateLimited(f"dict-chrome-ex: {first}; gtx: {e}") from e
+
+
+def _needs_th(a: dict) -> bool:
+    return (a.get("lang") or "en") != "th"
+
+
+def fill_translations(articles: dict[str, dict], run_at: datetime, prev: dict | None) -> dict:
+    """Add title_th / summary_th / content_th to stories that lack them, newest first, within the budget."""
+    t0 = time.monotonic()
+    newest = sorted((a for a in articles.values() if _needs_th(a)),
+                    key=lambda a: (a.get("published_at") or a["fetched_at"]), reverse=True)
+    recent = iso(run_at - timedelta(days=TR_CONTENT_DAYS))
+    # jobs: (article, field, texts). Titles and summaries for every story, then full text for recent ones.
+    jobs = []
+    for a in newest:
+        if not a.get("title_th") and a.get("title"):
+            jobs.append((a, "title_th", [a["title"]]))
+        if not a.get("summary_th") and a.get("summary"):
+            jobs.append((a, "summary_th", [a["summary"]]))
+    for a in newest:
+        if a.get("content") and not a.get("content_th") and a["fetched_at"] >= recent:
+            paras = [p for p in a["content"].split("\n")]
+            jobs.append((a, "content_th", paras))
+
+    stats = {"engine": None, "requests": 0, "chars": 0, "fields": 0, "limited": False, "error": None,
+             "pending": 0, "seconds": 0}
+    # take whole jobs, newest first, up to the character budget
+    take, chars = [], 0
+    for job in jobs:
+        n = sum(len(t) for t in job[2])
+        if chars + n > TR_BUDGET_CHARS and take:
+            break
+        take.append(job)
+        chars += n
+    # pieces -> requests of at most TR_BATCH_CHARS / TR_BATCH_ITEMS
+    out = [[None] * len(texts) for _, _, texts in take]
+    batches, cur, size = [], [], 0
+    for j, (_, _, texts) in enumerate(take):
+        for k, t in enumerate(texts):
+            if not t.strip():
+                out[j][k] = t
+                continue
+            if cur and (size + len(t) > TR_BATCH_CHARS or len(cur) >= TR_BATCH_ITEMS):
+                batches.append(cur)
+                cur, size = [], 0
+            cur.append((j, k, t[:4500]))
+            size += len(t)
+    if cur:
+        batches.append(cur)
+    try:
+        for b in batches:
+            if time.monotonic() - t0 > TR_BUDGET_SECONDS:
+                break
+            got, stats["engine"] = translate_texts([t for _, _, t in b])
+            stats["requests"] += 1
+            stats["chars"] += sum(len(t) for _, _, t in b)
+            for (j, k, _), th in zip(b, got):
+                out[j][k] = th
+    except TranslateLimited as e:
+        stats["limited"] = True
+        stats["error"] = str(e)[:300]
+    except Exception as e:  # noqa: BLE001 - translation is extra; the news must still be published
+        stats["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+    # keep only fields translated in full (a half-translated article would mix languages)
+    for (a, field, _), parts in zip(take, out):
+        if all(x is not None for x in parts):
+            a[field] = "\n".join(parts) if field == "content_th" else parts[0]
+            stats["fields"] += 1
+
+    stats["pending"] = sum(1 for a, f, _ in jobs if not a.get(f))
+    stats["seconds"] = round(time.monotonic() - t0, 1)
+    prev_tr = (prev or {}).get("translate") or {}
+    if stats["limited"]:
+        stats["limited_since"] = prev_tr.get("limited_since") if prev_tr.get("limited") else iso(run_at)
+    stats["last_ok_at"] = iso(run_at) if stats["fields"] and not stats["limited"] else prev_tr.get("last_ok_at")
+    return stats
+
+
 def cmd_run(args) -> int:
     started = time.monotonic()
     run_at = now_utc()
@@ -913,6 +1050,11 @@ def cmd_run(args) -> int:
         fulltext_stats["seconds"] = round(time.monotonic() - t0, 1)
         print(f"full text: {fulltext_stats}", flush=True)
 
+    translate_stats = None
+    if os.environ.get("TRANSLATE", "1") == "1":
+        translate_stats = fill_translations(articles, run_at, prev_status)
+        print(f"translate: {translate_stats}", flush=True)
+
     # Group by fetch date and drop anything past retention.
     cutoff = run_at.date() - timedelta(days=RETENTION_DAYS)
     by_day: dict[str, list[dict]] = {}
@@ -961,6 +1103,7 @@ def cmd_run(args) -> int:
         "articles_total": sum(f["count"] for f in index_files),
         "articles_before": before,
         "fulltext": fulltext_stats,
+        "translate": translate_stats,
         "sources": src_status,
     }, ensure_ascii=False, indent=1), encoding="utf-8")
 
