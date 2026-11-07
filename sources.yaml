@@ -632,10 +632,11 @@ sources:
   - id: reliefweb
     name: ReliefWeb Disasters
     url: https://reliefweb.int/disasters/rss.xml
+    note: disabled - HTTP 202 bot wall from GitHub Actions
     category: disaster
     lang: en
     fulltext: false
-    enabled: true
+    enabled: false
 
   - id: un-peace
     name: UN News Peace and Security
