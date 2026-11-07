@@ -279,7 +279,7 @@ def fetch_source(source: dict) -> list[dict]:
 TOPICS = {
     "conflict": re.compile(
         r"\b(war|wars|warfare|wartime|air ?strikes?|missiles?|drone (strike|attack)s?|shelling|ceasefire|truce|"
-        r"invasion|invaded|frontline|front line|armed conflict|military offensive|insurgents?|militants?|rebels?|"
+        r"frontline|front line|armed conflict|military offensive|insurgents?|militants?|rebels?|"
         r"hamas|hezbollah|houthis?|gaza|west bank|ukraine|kyiv|kremlin|nato|coup|hostages?|troops)\b"
         r"|สงคราม|สู้รบ|ปะทะ|ขีปนาวุธ|โจมตีทางอากาศ|ยิงถล่ม|หยุดยิง|รุกราน|ตัวประกัน|ฮามาส|ฮิซบอลเลาะห์|ฮูตี|กาซา|ยูเครน|รัฐประหาร",
         re.I),
@@ -296,7 +296,12 @@ NOT_TOPIC = re.compile(r"\b(trade|price|tariff|culture|console|bidding|talent|st
                        r"|สงครามการค้า|สงครามราคา|สงครามภาษี|พายุหมุนทางการเงิน", re.I)
 # Categories where these words are usually metaphors (a "war" of words in football, a film called "Typhoon").
 NO_TOPIC_CATEGORIES = {"sport", "entertainment", "tech"}
-BREAKING = re.compile(r"^\s*(breaking( news)?\b|ข่าวด่วน|ด่วน[!:\s])", re.I)
+# "BREAKING" in English titles is used for real news; Thai "ด่วน!" is also used for celebrity gossip,
+# so a Thai one only counts when the story is also about a war or a disaster.
+BREAKING = re.compile(r"^\s*breaking( news)?\b", re.I)
+BREAKING_TH = re.compile(r"^\s*(ข่าวด่วน|ด่วน[!:\s])")
+# Keyword lists are English and Thai only (French "militants" means activists).
+TOPIC_LANGS = {"en", "th"}
 
 
 def mark(a: dict, source: dict | None) -> None:
@@ -304,13 +309,14 @@ def mark(a: dict, source: dict | None) -> None:
     title = a.get("title") or ""
     text = title + " " + (a.get("summary") or "")[:300]
     tags = []
-    if a.get("category") not in NO_TOPIC_CATEGORIES and not NOT_TOPIC.search(text):
+    if (a.get("lang") or "en") in TOPIC_LANGS and a.get("category") not in NO_TOPIC_CATEGORIES             and not NOT_TOPIC.search(text):
         tags = [t for t, rx in TOPICS.items() if rx.search(text)]
     if a.get("category") == "disaster" and "disaster" not in tags:
         tags.append("disaster")
     a["tags"] = tags
     rule = (source or {}).get("alert_if")
-    a["alert"] = bool(BREAKING.search(title) or (rule and re.search(rule, text)))
+    a["alert"] = bool(BREAKING.search(title) or (BREAKING_TH.search(title) and tags)
+                      or (rule and re.search(rule, text)))
 
 
 # ---------- full text from article pages (phase 3) ----------
