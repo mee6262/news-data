@@ -518,8 +518,8 @@ sources:
     url: https://www.espn.com/espn/rss/news
     category: sport
     lang: en
-    enabled: true
-    note: added 2026-11-07 (new categories)
+    enabled: false
+    note: added 2026-11-07; disabled - HTTP 202 bot wall from GitHub Actions
 
   - id: matichon-sport
     name: Matichon Sport
