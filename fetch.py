@@ -314,7 +314,10 @@ def fill_fulltext(articles: dict[str, dict], sources: dict[str, dict]) -> dict:
                 continue
             text = trafilatura.extract(html_text, url=a["url"], include_comments=False,
                                        include_tables=False, favor_precision=True) or ""
-            text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            while lines and len(lines[0]) < 40:  # drop leading bylines/"- Published" before the first paragraph
+                lines.pop(0)
+            text = "\n".join(lines)
             if len(text) >= CONTENT_MIN:
                 a["content"] = truncate(text, CONTENT_MAX)
                 a["fulltext"] = "ok"
