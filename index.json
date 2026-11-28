@@ -1,0 +1,121 @@
+{
+ "generated_at": "2026-11-28T12:04:06Z",
+ "retention_days": 30,
+ "files": [
+  {
+   "name": "news/2026-11-28.json",
+   "sha256": "bbdc2a3353ffde791b4a07f9bd1bb521777477872609fdc376c926b783b74738",
+   "count": 993
+  },
+  {
+   "name": "news/2026-11-27.json",
+   "sha256": "ecc748a63f9050a32e7715ce7884288fb1d9beedbea703a6e764d096dd58a850",
+   "count": 2471
+  },
+  {
+   "name": "news/2026-11-26.json",
+   "sha256": "a7786885e8d8113cf72a58a4250651e4908f40c4f4db5e5c3afcacf8f194ae39",
+   "count": 1938
+  },
+  {
+   "name": "news/2026-11-25.json",
+   "sha256": "d1fefee76152fd52693270cbdd303a6c17c4721df3349e945b6ec299f981717d",
+   "count": 3009
+  },
+  {
+   "name": "news/2026-11-24.json",
+   "sha256": "8c12ff850e3cdc3191eabd8c628ef451aff09a371a3eecf2770709d30e6d6250",
+   "count": 2889
+  },
+  {
+   "name": "news/2026-11-23.json",
+   "sha256": "d7b12655620da8f34aff00deac90db2e409b05ce99b274faba306deef7cf7cb1",
+   "count": 2618
+  },
+  {
+   "name": "news/2026-11-22.json",
+   "sha256": "3d349ca11b80d6fe01d063c0e97b2862318bbe3f7548f3439ae202e95825d012",
+   "count": 1750
+  },
+  {
+   "name": "news/2026-11-21.json",
+   "sha256": "fcd2ecdce598058f76ccfe4be395ece7d7461872fb2fb9117e04fa5e0a562884",
+   "count": 1735
+  },
+  {
+   "name": "news/2026-11-20.json",
+   "sha256": "681f31f69526891f6a9f054b864efa36193f92d46d8338d6d041ab7ff5157db2",
+   "count": 2892
+  },
+  {
+   "name": "news/2026-11-19.json",
+   "sha256": "9a1287f1b6f0f30ab81357881f4ce543a172cbe49da83392d6975bd15c94fba7",
+   "count": 3193
+  },
+  {
+   "name": "news/2026-11-18.json",
+   "sha256": "ec7f7d66e72831941d66b93e16f0501f8645c6af9fc6543b9b30a37a60770cc9",
+   "count": 3163
+  },
+  {
+   "name": "news/2026-11-17.json",
+   "sha256": "4a468012d0076e905744ae50879e92b26de207044c13368bda2b0cf06baf7a18",
+   "count": 3104
+  },
+  {
+   "name": "news/2026-11-16.json",
+   "sha256": "fb0cb5ed689a20aa353ec51ab0c88ab30b143cf2bae832e8ce23cdcfbbb9f835",
+   "count": 2933
+  },
+  {
+   "name": "news/2026-11-15.json",
+   "sha256": "afec4a939b566e0be1c4529bc7218f18086110180d4f06ea001f46ed44fbec1d",
+   "count": 1823
+  },
+  {
+   "name": "news/2026-11-14.json",
+   "sha256": "f633a82641c244323f8440949a13571af809d4115952f12bc30f4c4fa467c8f6",
+   "count": 1933
+  },
+  {
+   "name": "news/2026-11-13.json",
+   "sha256": "dd209c97cfe8564b724de127cc40c3f612d5eac37b55367c6688b2d5b870eee8",
+   "count": 2949
+  },
+  {
+   "name": "news/2026-11-12.json",
+   "sha256": "94d7ab4d1c0411c4ce484cac58fec221c77f52eccbba55495287e04740d3f68d",
+   "count": 3084
+  },
+  {
+   "name": "news/2026-11-11.json",
+   "sha256": "a1852c39bbe12e65dc2f10934ddce9feb7cc9975715ff1b4cd45e77b6a277923",
+   "count": 3004
+  },
+  {
+   "name": "news/2026-11-10.json",
+   "sha256": "bcb004c035743634db7525b3e496289105a67b37d1d3f3b1c94adf95d37d6d0f",
+   "count": 3374
+  },
+  {
+   "name": "news/2026-11-09.json",
+   "sha256": "0020bf5f5600888d28b8353b42652a752a80e430bf46385c7ea6d90604ad362e",
+   "count": 3081
+  },
+  {
+   "name": "news/2026-11-08.json",
+   "sha256": "8a11ae907eb25cbc0c3a5ee8728104adf42d9bbd5c5e26a60c42ac11d92bc9f1",
+   "count": 2111
+  },
+  {
+   "name": "news/2026-11-07.json",
+   "sha256": "a41d219ef505f001ff30e0cdd1ab037da0af6391506fed3ca238c02b3e0b2338",
+   "count": 3615
+  },
+  {
+   "name": "news/2026-11-06.json",
+   "sha256": "80a816b75fdfe8661bce6d0e01d2ec8b121e2815eb2a0a6516310181e8ad670b",
+   "count": 593
+  }
+ ]
+}
